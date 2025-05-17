@@ -17,3 +17,4 @@
 ```bash
 sudo apt update
 sudo apt install build-essential g++ make openssh-client openssh-server
+sudo apt install -y pvm
