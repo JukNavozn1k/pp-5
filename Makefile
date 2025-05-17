@@ -1,20 +1,24 @@
-CXX = g++
-CXXFLAGS = -Wall -Wextra -std=c++17
-SRC_DIR = src
-BIN_DIR = bin
-TARGET = $(BIN_DIR)/hello
-SRCS = $(wildcard $(SRC_DIR)/*.cpp)
-OBJS = $(SRCS:.cpp=.o)
+CXX := g++
+CXXFLAGS := -std=c++11 -O2 -pthread
+SRC_DIR := src
+BUILD_DIR := build
+TARGET := $(BUILD_DIR)/main
 
-all: $(BIN_DIR) $(TARGET)
+SRCS := $(wildcard $(SRC_DIR)/*.cpp)
+OBJS := $(patsubst $(SRC_DIR)/%.cpp, $(BUILD_DIR)/%.o, $(SRCS))
 
-$(BIN_DIR):
-	mkdir -p $(BIN_DIR)
+all: $(TARGET)
 
-$(TARGET): $(SRCS)
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
+
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(TARGET): $(OBJS)
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
 clean:
-	rm -rf $(BIN_DIR) *.o $(SRC_DIR)/*.o
+	rm -rf $(BUILD_DIR)
 
 .PHONY: all clean
