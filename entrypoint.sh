@@ -37,8 +37,10 @@ pkill sshd || true
 pvm &
 sleep 2
 
-# Сохраняем hostname воркера (или master) в volume
-hostname > /root/.ssh/worker_hostname_$(hostname)
+# Сохраняем hostname воркера (или master) в volume, только если такого файла ещё нет
+if [ ! -f /root/.ssh/worker_hostname_$(hostname) ]; then
+    hostname > /root/.ssh/worker_hostname_$(hostname)
+fi
 
 if [ "$ROLE" = "master" ]; then
     # Ждем появления hostnames от всех воркеров (ожидаем 1 по умолчанию, можно увеличить)
@@ -47,8 +49,11 @@ if [ "$ROLE" = "master" ]; then
     while [ $(ls /root/.ssh/worker_hostname_* 2>/dev/null | wc -l) -lt $WORKER_COUNT ]; do
         sleep 1
     done
-    # Собираем hostnames в файл
-    cat /root/.ssh/worker_hostname_* > /root/.ssh/pvm_hosts
+    # Собираем hostnames из содержимого файлов, а не из имён файлов
+    > /root/.ssh/pvm_hosts
+    for f in /root/.ssh/worker_hostname_*; do
+        cat "$f" >> /root/.ssh/pvm_hosts
+    done
     echo "Список воркеров:"
     cat /root/.ssh/pvm_hosts
     # Добавляем воркеров в known_hosts
@@ -64,6 +69,6 @@ if [ "$ROLE" = "master" ]; then
     /app/build/main
     pvm halt
 else
-    /app/build/main worker &
-    exec /usr/sbin/sshd -D
+    /app/build/main worker || true
+    tail -f /dev/null
 fi
