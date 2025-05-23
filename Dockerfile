@@ -11,7 +11,7 @@ RUN apt-get update && \
     iputils-ping \
     dnsutils \
     net-tools \
-    procps \
+    strace \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

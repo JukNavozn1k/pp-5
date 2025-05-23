@@ -37,12 +37,12 @@ echo "root:${SSH_PASSWORD:-root}" | chpasswd
 # Настройка PVM
 export PVM_ROOT=/usr/lib/pvm3
 export PVM_ARCH=LINUX64
-export PVM_RSH=ssh
+export PVM_RSH=/usr/bin/ssh
 export PVM_EXPORT=DISPLAY
 
 # Очистка PVM
 pkill -9 pvmd || true
-rm -rf /tmp/pvm* /root/.pvm/*
+rm -rf /tmp/pvm* /root/.pvm/* /usr/lib/pvm3/lib/LINUX64/pvmd.lock
 
 # Запуск PVM демона с расширенным логированием
 echo "Starting PVM daemon..."
@@ -79,7 +79,7 @@ if [ "$ROLE" = "master" ]; then
     echo "Master node initializing..."
     
     # Ожидание 2 worker'ов
-    total_timeout=600
+    total_timeout=900
     start_time=$(date +%s)
     while [ $(ls /root/.ssh/worker_hostname* 2>/dev/null | wc -l) -lt 2 ]; do
         current_time=$(date +%s)
@@ -89,7 +89,7 @@ if [ "$ROLE" = "master" ]; then
             exit 1
         fi
         echo "Waiting for workers... ($(ls /root/.ssh/worker_hostname* 2>/dev/null | wc -l)/2)"
-        sleep 5
+        sleep 10
     done
     
     # Сбор хостов через Docker DNS
@@ -101,18 +101,19 @@ if [ "$ROLE" = "master" ]; then
     for host in $HOSTS; do
         ssh-keyscan -H $host >> /root/.ssh/known_hosts
         ssh-keyscan -H $host.pp-5_pvmnet >> /root/.ssh/known_hosts
+        ssh-keyscan -H $(dig +short $host) >> /root/.ssh/known_hosts
     done
     
     # Интенсивная проверка SSH
     for host in $HOSTS; do
         echo "Testing SSH to $host"
-        for i in {1..10}; do
+        for i in {1..15}; do
             if ssh -o BatchMode=yes -o ConnectTimeout=5 root@$host "echo Connection-success"; then
                 echo "SSH to $host OK"
                 break
             else
                 echo "SSH attempt $i to $host failed"
-                sleep 5
+                sleep 10
             fi
         done
     done
@@ -121,7 +122,7 @@ if [ "$ROLE" = "master" ]; then
     pvm halt || true
     pkill -9 pvmd
     rm -rf /tmp/pvm*
-    sleep 5
+    sleep 10
     
     # Запуск PVM с расширенным логированием
     pvmd -d -n pvm-master > /tmp/pvmd.log 2>&1 &
@@ -129,23 +130,31 @@ if [ "$ROLE" = "master" ]; then
     # Добавление хостов через прямое соединение
     for host in $HOSTS; do
         echo "Adding host: $host"
-        for i in {1..10}; do
-            if timeout 30 pvm addhosts $host; then
+        for i in {1..15}; do
+            if timeout 45 pvm addhosts $host; then
                 echo "Host $host added"
                 break
             else
                 echo "Error adding $host, retry $i"
-                sleep 10
+                sleep 15
                 pvm delhosts $host 2>/dev/null || true
             fi
         done
     done
+    
+    # Принудительная синхронизация
+    pvmctl -n pvm-master reconfig
+    sleep 5
     
     # Финальная проверка
     echo "PVM Configuration:"
     pvm conf -v
     echo "Active Hosts:"
     pvm hosts -v
+    
+    # Логирование статуса
+    pvmdstatus -n pvm-master
+    netstat -tulpn | grep pvm
     
     # Запуск приложения
     echo "Starting application..."
