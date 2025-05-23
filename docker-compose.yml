@@ -1,0 +1,23 @@
+version: '3.8'
+services:
+  master:
+    build: .
+    environment:
+      - ROLE=master
+    networks:
+      - pvmnet
+    tty: true
+  worker:
+    build: .
+    environment:
+      - ROLE=worker
+    networks:
+      - pvmnet
+    tty: true
+    depends_on:
+      - master
+    deploy:
+      replicas: 2
+networks:
+  pvmnet:
+    driver: bridge
