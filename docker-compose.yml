@@ -4,6 +4,7 @@ services:
     build: .
     environment:
       - ROLE=master
+      - PVM_ALLOW_ROOT=1
     networks:
       - pvmnet
     tty: true
@@ -11,13 +12,14 @@ services:
     build: .
     environment:
       - ROLE=worker
+      - PVM_ALLOW_ROOT=1
     networks:
       - pvmnet
     tty: true
     depends_on:
       - master
     deploy:
-      replicas: 1
+      replicas: 7
 networks:
   pvmnet:
     driver: bridge
