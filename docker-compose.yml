@@ -14,7 +14,7 @@ services:
       - sshkeys:/root/.ssh
   worker:
     build: .
-    hostname: worker
+ 
     environment:
       - ROLE=worker
       - PVM_ALLOW_ROOT=1
@@ -27,7 +27,7 @@ services:
     volumes:
       - sshkeys:/root/.ssh
     deploy:
-      replicas: 2
+      replicas: 1
 networks:
   pvmnet:
     driver: bridge
