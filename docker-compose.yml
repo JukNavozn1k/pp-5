@@ -6,20 +6,30 @@ services:
     environment:
       - ROLE=master
       - PVM_ALLOW_ROOT=1
+      - SSH_PASSWORD=root
     networks:
       - pvmnet
     tty: true
+    volumes:
+      - sshkeys:/root/.ssh
   worker:
     build: .
     hostname: worker
     environment:
       - ROLE=worker
       - PVM_ALLOW_ROOT=1
+      - SSH_PASSWORD=root
     networks:
       - pvmnet
     tty: true
     depends_on:
       - master
+    volumes:
+      - sshkeys:/root/.ssh
+    deploy:
+      replicas: 2
 networks:
   pvmnet:
     driver: bridge
+volumes:
+  sshkeys:
