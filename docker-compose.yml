@@ -2,6 +2,7 @@ version: '3.8'
 services:
   master:
     build: .
+    hostname: master
     environment:
       - ROLE=master
       - PVM_ALLOW_ROOT=1
@@ -10,6 +11,7 @@ services:
     tty: true
   worker:
     build: .
+    hostname: worker
     environment:
       - ROLE=worker
       - PVM_ALLOW_ROOT=1
@@ -18,8 +20,6 @@ services:
     tty: true
     depends_on:
       - master
-    deploy:
-      replicas: 7
 networks:
   pvmnet:
     driver: bridge

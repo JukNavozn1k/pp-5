@@ -96,23 +96,27 @@ Matrix strassenSequential(const Matrix& A, const Matrix& B) {
 }
 
 int pvm_worker_main() {
-    int m;
-    pvm_recv(-1, 1);
-    pvm_upkint(&m, 1, 1);
-    Matrix A(m, vector<int>(m)), B(m, vector<int>(m));
-    for (int i = 0; i < m; ++i)
-        for (int j = 0; j < m; ++j)
-            pvm_upkint(&A[i][j], 1, 1);
-    for (int i = 0; i < m; ++i)
-        for (int j = 0; j < m; ++j)
-            pvm_upkint(&B[i][j], 1, 1);
-    Matrix C = strassenPVM(A, B);
-    pvm_initsend(PvmDataDefault);
-    pvm_pkint(&m, 1, 1);
-    for (int i = 0; i < m; ++i)
-        for (int j = 0; j < m; ++j)
-            pvm_pkint(&C[i][j], 1, 1);
-    pvm_send(pvm_parent(), 2);
+    while (true) {
+        int m;
+        int status = pvm_recv(-1, 1);
+        if (status < 0) break; // Ошибка или завершение
+        pvm_upkint(&m, 1, 1);
+        if (m == -1) break; // Специальная команда завершения
+        Matrix A(m, vector<int>(m)), B(m, vector<int>(m));
+        for (int i = 0; i < m; ++i)
+            for (int j = 0; j < m; ++j)
+                pvm_upkint(&A[i][j], 1, 1);
+        for (int i = 0; i < m; ++i)
+            for (int j = 0; j < m; ++j)
+                pvm_upkint(&B[i][j], 1, 1);
+        Matrix C = strassenPVM(A, B);
+        pvm_initsend(PvmDataDefault);
+        pvm_pkint(&m, 1, 1);
+        for (int i = 0; i < m; ++i)
+            for (int j = 0; j < m; ++j)
+                pvm_pkint(&C[i][j], 1, 1);
+        pvm_send(pvm_parent(), 2);
+    }
     return 0;
 }
 

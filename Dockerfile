@@ -2,8 +2,13 @@ FROM ubuntu:22.04
 
 # Установка зависимостей
 RUN apt-get update && \
-    apt-get install -y build-essential pvm pvm-dev make g++ && \
+    apt-get install -y build-essential pvm pvm-dev make g++ openssh-server && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Настройка SSH
+RUN mkdir /var/run/sshd && \
+    echo 'root:root' | chpasswd && \
+    ssh-keygen -A
 
 # Копируем исходники
 WORKDIR /app
@@ -21,8 +26,8 @@ ENV PVM_ARCH=LINUX64
 ENV PVM_DPATH=/tmp
 ENV PVM_TMP=/tmp
 
-# Открываем порты для PVM
-EXPOSE 4096-4196
+# Открываем порты для PVM и SSH
+EXPOSE 4096-4196 22
 
 # Копируем скрипт запуска
 COPY entrypoint.sh /entrypoint.sh
