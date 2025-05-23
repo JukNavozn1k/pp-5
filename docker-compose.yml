@@ -2,32 +2,65 @@ version: '3.8'
 services:
   master:
     build: .
+    hostname: pvm-master
     environment:
       - ROLE=master
       - PVM_ALLOW_ROOT=1
       - SSH_PASSWORD=root
+      - PVM_RSH=ssh
+      - PVM_DEBUG=1
+      - PVM_TRACE=1
     networks:
-      - pvmnet
-    tty: true
+      pvmnet:
+        aliases:
+          - pvm-master
+          - master
+    dns: 8.8.8.8
+    dns_search: .
     volumes:
       - sshkeys:/root/.ssh
+    ports:
+      - "4096-4196:4096-4196"
+      - "2222:22"
+    tty: true
+    healthcheck:
+      test: ["CMD", "pvm", "conf"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
   worker:
     build: .
     environment:
       - ROLE=worker
       - PVM_ALLOW_ROOT=1
       - SSH_PASSWORD=root
+      - PVM_RSH=ssh
+      - PVM_DEBUG=1
     networks:
-      - pvmnet
-    tty: true
+      pvmnet:
+        aliases:
+          - worker
     depends_on:
       - master
-    volumes:
-      - sshkeys:/root/.ssh
+    dns: 8.8.8.8
+    dns_search: .
     deploy:
       replicas: 2
+    volumes:
+      - sshkeys:/root/.ssh
+    tty: true
+    healthcheck:
+      test: ["CMD", "pvm", "ps"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
 networks:
   pvmnet:
     driver: bridge
+    attachable: true
+    internal: false
+
 volumes:
   sshkeys:

@@ -1,74 +1,153 @@
 #!/bin/bash
 set -e
 
-# Генерация ssh-ключа только если его нет (теперь ключ общий для всех через volume)
-if [ ! -f /root/.ssh/id_rsa ]; then
-    mkdir -p /root/.ssh
-    ssh-keygen -t rsa -N "" -f /root/.ssh/id_rsa
-fi
-cat /root/.ssh/id_rsa.pub >> /root/.ssh/authorized_keys
-chmod 600 /root/.ssh/authorized_keys
+# Инициализация SSH
+mkdir -p /root/.ssh
+chmod 700 /root/.ssh
 
-# Разрешаем root вход по ssh
-if ! grep -q "PermitRootLogin yes" /etc/ssh/sshd_config; then
-    echo "PermitRootLogin yes" >> /etc/ssh/sshd_config
-fi
-# Отключаем аутентификацию по паролю, только по ключу
-if ! grep -q "PasswordAuthentication no" /etc/ssh/sshd_config; then
-    echo "PasswordAuthentication no" >> /etc/ssh/sshd_config
+# Генерация SSH ключа только на мастере
+if [ "$ROLE" = "master" ] && [ ! -f /root/.ssh/id_rsa ]; then
+    echo "Generating master SSH key pair..."
+    ssh-keygen -t rsa -N "" -f /root/.ssh/id_rsa -q
+    cat /root/.ssh/id_rsa.pub > /root/.ssh/authorized_keys
+    chmod 600 /root/.ssh/authorized_keys
 fi
 
-# Прописываем PVM_ROOT и PVM_ARCH в .bashrc для ssh-сессий
-if ! grep -q "PVM_ROOT" /root/.bashrc; then
-    echo "export PVM_ROOT=/usr/lib/pvm3" >> /root/.bashrc
-    echo "export PVM_ARCH=LINUX64" >> /root/.bashrc
+# Для воркеров: ждем ключ от мастера
+if [ "$ROLE" = "worker" ]; then
+    while [ ! -f /root/.ssh/authorized_keys ]; do
+        echo "Waiting for master SSH key..."
+        sleep 2
+    done
 fi
 
-# Устанавливаем пароль root из переменной окружения (по умолчанию root)
-if [ -n "$SSH_PASSWORD" ]; then
-    echo "root:$SSH_PASSWORD" | chpasswd
-fi
+# Настройка SSH
+sed -i 's/#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+sed -i 's/#PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
 
-# Перезапускаем sshd для применения настроек
-pkill sshd || true
+echo -e "Host *\n    StrictHostKeyChecking no\n    UserKnownHostsFile /dev/null" > /root/.ssh/config
+chmod 600 /root/.ssh/config
+
+# Установка пароля
+echo "root:${SSH_PASSWORD:-root}" | chpasswd
+
+# Запуск SSH
 /usr/sbin/sshd
 
-# Ждем запуска демона PVM
-pvm &
-sleep 2
+# Настройка PVM
+export PVM_ROOT=/usr/lib/pvm3
+export PVM_ARCH=LINUX64
+export PVM_RSH=ssh
+export PVM_EXPORT=DISPLAY
 
-# Сохраняем hostname воркера (или master) в volume, только если такого файла ещё нет
-if [ ! -f /root/.ssh/worker_hostname_$(hostname) ]; then
-    hostname > /root/.ssh/worker_hostname_$(hostname)
+# Очистка PVM
+pkill -9 pvmd || true
+rm -rf /tmp/pvm* /root/.pvm/*
+
+# Запуск PVM демона с расширенным логированием
+echo "Starting PVM daemon..."
+pvmd -d -n $(hostname) > /tmp/pvmd.log 2>&1 &
+
+# Ожидание запуска PVM
+for i in {1..30}; do
+    if pvm ps >/dev/null 2>&1; then
+        echo "PVM daemon started"
+        break
+    fi
+    echo "PVM startup attempt $i/30..."
+    sleep 2
+done
+
+# Логика worker
+if [ "$ROLE" = "worker" ]; then
+    echo "Worker $HOSTNAME initializing..."
+    echo "$HOSTNAME" > "/root/.ssh/worker_hostname"
+    
+    # Проверка связи с мастером
+    until ping -c 2 pvm-master; do
+        echo "Waiting for master..."
+        sleep 2
+    done
+    
+    # Бесконечное ожидание
+    tail -f /dev/null
+    exit 0
 fi
 
+# Логика master
 if [ "$ROLE" = "master" ]; then
-    # Ждем появления hostnames от всех воркеров (ожидаем 1 по умолчанию, можно увеличить)
-    WORKER_COUNT=${WORKER_COUNT:-1}
-    echo "Ожидание hostnames от $WORKER_COUNT воркеров..."
-    while [ $(ls /root/.ssh/worker_hostname_* 2>/dev/null | wc -l) -lt $WORKER_COUNT ]; do
-        sleep 1
+    echo "Master node initializing..."
+    
+    # Ожидание 2 worker'ов
+    total_timeout=600
+    start_time=$(date +%s)
+    while [ $(ls /root/.ssh/worker_hostname* 2>/dev/null | wc -l) -lt 2 ]; do
+        current_time=$(date +%s)
+        if [ $((current_time - start_time)) -ge $total_timeout ]; then
+            echo "Timeout waiting for workers"
+            docker network inspect pp-5_pvmnet
+            exit 1
+        fi
+        echo "Waiting for workers... ($(ls /root/.ssh/worker_hostname* 2>/dev/null | wc -l)/2)"
+        sleep 5
     done
-    # Собираем hostnames из содержимого файлов, а не из имён файлов
-    > /root/.ssh/pvm_hosts
-    for f in /root/.ssh/worker_hostname_*; do
-        cat "$f" >> /root/.ssh/pvm_hosts
+    
+    # Сбор хостов через Docker DNS
+    WORKERS=$(docker network inspect pp-5_pvmnet -f '{{range .Containers}}{{.Name}} {{end}}')
+    HOSTS="pvm-master $WORKERS"
+    
+    # Форсированное обновление known_hosts
+    > /root/.ssh/known_hosts
+    for host in $HOSTS; do
+        ssh-keyscan -H $host >> /root/.ssh/known_hosts
+        ssh-keyscan -H $host.pp-5_pvmnet >> /root/.ssh/known_hosts
     done
-    echo "Список воркеров:"
-    cat /root/.ssh/pvm_hosts
-    # Добавляем воркеров в known_hosts
-    while read host; do
-        ssh-keyscan -H $host >> /root/.ssh/known_hosts 2>/dev/null
-    done < /root/.ssh/pvm_hosts
-    # Проверяем SSH доступность
-    while read host; do
-        until ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2 root@$host hostname; do
-            echo "Ожидание SSH для $host..."; sleep 1;
+    
+    # Интенсивная проверка SSH
+    for host in $HOSTS; do
+        echo "Testing SSH to $host"
+        for i in {1..10}; do
+            if ssh -o BatchMode=yes -o ConnectTimeout=5 root@$host "echo Connection-success"; then
+                echo "SSH to $host OK"
+                break
+            else
+                echo "SSH attempt $i to $host failed"
+                sleep 5
+            fi
         done
-    done < /root/.ssh/pvm_hosts
-    /app/build/main
-    pvm halt
-else
-    /app/build/main worker || true
-    tail -f /dev/null
+    done
+    
+    # Перезапуск PVM
+    pvm halt || true
+    pkill -9 pvmd
+    rm -rf /tmp/pvm*
+    sleep 5
+    
+    # Запуск PVM с расширенным логированием
+    pvmd -d -n pvm-master > /tmp/pvmd.log 2>&1 &
+    
+    # Добавление хостов через прямое соединение
+    for host in $HOSTS; do
+        echo "Adding host: $host"
+        for i in {1..10}; do
+            if timeout 30 pvm addhosts $host; then
+                echo "Host $host added"
+                break
+            else
+                echo "Error adding $host, retry $i"
+                sleep 10
+                pvm delhosts $host 2>/dev/null || true
+            fi
+        done
+    done
+    
+    # Финальная проверка
+    echo "PVM Configuration:"
+    pvm conf -v
+    echo "Active Hosts:"
+    pvm hosts -v
+    
+    # Запуск приложения
+    echo "Starting application..."
+    exec /app/build/main
 fi
