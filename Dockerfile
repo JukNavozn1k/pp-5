@@ -12,6 +12,8 @@ COPY Makefile ./
 
 # Сборка приложения
 RUN make
+# Копируем собранный бинарник в src/main для совместимости со скриптом (или меняем путь в entrypoint.sh)
+RUN cp build/main src/main
 
 # Установка переменных окружения для PVM
 ENV PVM_ROOT=/usr/lib/pvm3

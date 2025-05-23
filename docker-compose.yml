@@ -17,7 +17,7 @@ services:
     depends_on:
       - master
     deploy:
-      replicas: 2
+      replicas: 1
 networks:
   pvmnet:
     driver: bridge

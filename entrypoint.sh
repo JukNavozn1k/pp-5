@@ -9,10 +9,10 @@ sleep 2
 
 # Если это мастер, запускаем main, иначе ждем команд от мастера
 if [ "$ROLE" = "master" ]; then
-    /app/src/main
+    /app/build/main
     # Останавливаем кластер после завершения
     pvm halt
 else
     # Воркеры ждут команд
-    /app/src/main worker
+    /app/build/main worker
 fi
