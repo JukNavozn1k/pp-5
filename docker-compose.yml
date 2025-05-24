@@ -1,4 +1,3 @@
-version: '3.8'
 services:
   master:
     build:
@@ -36,6 +35,7 @@ services:
     build: 
       context: .
       dockerfile: Dockerfile
+    hostname: worker-${INSTANCE:-1}
     environment:
       - ROLE=worker
       - PVM_ALLOW_ROOT=1
@@ -44,10 +44,12 @@ services:
       - PVM_ARCH=LINUX64
       - PVM_RSH=/usr/bin/ssh
       - PVM_DEBUG=5
+      - INSTANCE
     networks:
       pvmnet:
         aliases:
-          - worker
+          - worker-${INSTANCE:-1}
+          - worker-${INSTANCE:-1}.pp-5_pvmnet
     depends_on:
       - master
     deploy:

@@ -92,9 +92,8 @@ if [ "$ROLE" = "master" ]; then
         sleep 10
     done
     
-    # Сбор хостов через Docker DNS
-    WORKERS=$(docker network inspect pp-5_pvmnet -f '{{range .Containers}}{{.Name}} {{end}}')
-    HOSTS="pvm-master $WORKERS"
+    # Явное указание имен хостов
+    HOSTS="pvm-master worker-1 worker-2"
     
     # Форсированное обновление known_hosts
     > /root/.ssh/known_hosts
@@ -107,54 +106,48 @@ if [ "$ROLE" = "master" ]; then
     # Интенсивная проверка SSH
     for host in $HOSTS; do
         echo "Testing SSH to $host"
-        for i in {1..15}; do
-            if ssh -o BatchMode=yes -o ConnectTimeout=5 root@$host "echo Connection-success"; then
-                echo "SSH to $host OK"
-                break
-            else
-                echo "SSH attempt $i to $host failed"
-                sleep 10
-            fi
+        until ssh -o BatchMode=yes -o ConnectTimeout=5 root@$host "echo Connection-success"; do
+            echo "SSH to $host failed, retrying..."
+            sleep 10
         done
+        echo "SSH to $host OK"
     done
     
-    # Перезапуск PVM
+    # Полная очистка PVM
     pvm halt || true
     pkill -9 pvmd
-    rm -rf /tmp/pvm*
+    rm -rf /tmp/pvm* /root/.pvm/*
+    sleep 5
+    
+    # Перезапуск PVM демона
+    echo "Restarting PVM daemon..."
+    pvmd -d -n pvm-master > /tmp/pvmd.log 2>&1 &
     sleep 10
     
-    # Запуск PVM с расширенным логированием
-    pvmd -d -n pvm-master > /tmp/pvmd.log 2>&1 &
-    
-    # Добавление хостов через прямое соединение
+    # Добавление хостов с проверкой архитектуры
     for host in $HOSTS; do
         echo "Adding host: $host"
-        for i in {1..15}; do
-            if timeout 45 pvm addhosts $host; then
-                echo "Host $host added"
+        for i in {1..10}; do
+            if timeout 60 pvm add $host; then
+                echo "Host $host successfully added"
                 break
             else
-                echo "Error adding $host, retry $i"
+                echo "Failed to add $host, attempt $i/10"
+                pvm delhost $host >/dev/null 2>&1 || true
                 sleep 15
-                pvm delhosts $host 2>/dev/null || true
             fi
         done
     done
     
-    # Принудительная синхронизация
+    # Принудительная синхронизация конфигурации
     pvmctl -n pvm-master reconfig
     sleep 5
     
-    # Финальная проверка
+    # Проверка финальной конфигурации
     echo "PVM Configuration:"
     pvm conf -v
     echo "Active Hosts:"
     pvm hosts -v
-    
-    # Логирование статуса
-    pvmdstatus -n pvm-master
-    netstat -tulpn | grep pvm
     
     # Запуск приложения
     echo "Starting application..."
