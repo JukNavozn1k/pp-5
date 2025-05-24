@@ -12,6 +12,7 @@ RUN apt-get update && \
     dnsutils \
     net-tools \
     strace \
+    dos2unix \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -32,6 +33,7 @@ ENV PVM_TMP=/tmp
 EXPOSE 4096-4196 22
 
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN dos2unix /entrypoint.sh && \
+    chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]

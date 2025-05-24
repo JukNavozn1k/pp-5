@@ -1,7 +1,9 @@
 version: '3.8'
 services:
   master:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     hostname: pvm-master
     environment:
       - ROLE=master
@@ -31,7 +33,9 @@ services:
       retries: 5
 
   worker:
-    build: .
+    build: 
+      context: .
+      dockerfile: Dockerfile
     environment:
       - ROLE=worker
       - PVM_ALLOW_ROOT=1
