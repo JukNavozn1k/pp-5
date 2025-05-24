@@ -1,3 +1,5 @@
+version: "3.8"
+
 services:
   master:
     build:
@@ -19,7 +21,7 @@ services:
           - pvm-master
           - master
     volumes:
-      - sshkeys:/root/.ssh
+      - sshkeys:/home/pvmuser/.ssh
     ports:
       - "4096-4196:4096-4196/tcp"
       - "4096-4196:4096-4196/udp"
@@ -32,7 +34,7 @@ services:
       retries: 5
 
   worker:
-    build: 
+    build:
       context: .
       dockerfile: Dockerfile
     hostname: worker-${INSTANCE:-1}
@@ -55,7 +57,7 @@ services:
     deploy:
       replicas: 2
     volumes:
-      - sshkeys:/root/.ssh
+      - sshkeys:/home/pvmuser/.ssh
     tty: true
     healthcheck:
       test: ["CMD", "pvm", "ps"]
