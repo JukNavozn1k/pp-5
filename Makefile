@@ -1,24 +1,25 @@
+# Makefile for building main.cpp with PVM support
+
+# Компилятор и флаги
 CXX := g++
-CXXFLAGS := -std=c++11 -O2 -pthread
-SRC_DIR := src
-BUILD_DIR := build
-TARGET := $(BUILD_DIR)/main
+CXXFLAGS := -O2 -Wall -std=c++17
+PVMFLAGS := -I$(PVM_ROOT)/include -L$(PVM_ROOT)/lib/$(PVM_ARCH) -lpvm3
 
-SRCS := $(wildcard $(SRC_DIR)/*.cpp)
-OBJS := $(patsubst $(SRC_DIR)/%.cpp, $(BUILD_DIR)/%.o, $(SRCS))
+# Пути
+SRC := ./src/main.cpp
+OUTDIR := ./build
+TARGET := $(OUTDIR)/main
 
+# Правила
 all: $(TARGET)
 
-$(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)
+$(TARGET): $(SRC) | $(OUTDIR)
+	$(CXX) $(CXXFLAGS) $(SRC) -o $(TARGET) $(PVMFLAGS)
 
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-$(TARGET): $(OBJS)
-	$(CXX) $(CXXFLAGS) $^ -o $@
+$(OUTDIR):
+	mkdir -p $(OUTDIR)
 
 clean:
-	rm -rf $(BUILD_DIR)
+	rm -rf $(OUTDIR)
 
 .PHONY: all clean

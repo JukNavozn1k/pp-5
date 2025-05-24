@@ -1,0 +1,73 @@
+services:
+  master:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    hostname: pvm-master
+    environment:
+      - ROLE=master
+      - PVM_ALLOW_ROOT=1
+      - SSH_PASSWORD=root
+      - PVM_ROOT=/usr/lib/pvm3
+      - PVM_ARCH=LINUX64
+      - PVM_RSH=/usr/bin/ssh
+      - PVM_DEBUG=5
+      - PVM_TRACE=1
+    networks:
+      pvmnet:
+        aliases:
+          - pvm-master
+          - master
+    volumes:
+      - sshkeys:/root/.ssh
+    ports:
+      - "4096-4196:4096-4196/tcp"
+      - "4096-4196:4096-4196/udp"
+      - "2222:22"
+    tty: true
+    healthcheck:
+      test: ["CMD", "pvm", "conf"]
+      interval: 20s
+      timeout: 15s
+      retries: 5
+
+  worker:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    hostname: worker-${INSTANCE:-1}
+    environment:
+      - ROLE=worker
+      - PVM_ALLOW_ROOT=1
+      - SSH_PASSWORD=root
+      - PVM_ROOT=/usr/lib/pvm3
+      - PVM_ARCH=LINUX64
+      - PVM_RSH=/usr/bin/ssh
+      - PVM_DEBUG=5
+      - INSTANCE
+    networks:
+      pvmnet:
+        aliases:
+          - worker-${INSTANCE:-1}
+          - worker-${INSTANCE:-1}.pp-5_pvmnet
+    depends_on:
+      - master
+    deploy:
+      replicas: 2
+    volumes:
+      - sshkeys:/root/.ssh
+    tty: true
+    healthcheck:
+      test: ["CMD", "pvm", "ps"]
+      interval: 20s
+      timeout: 15s
+      retries: 5
+
+networks:
+  pvmnet:
+    driver: bridge
+    attachable: true
+    internal: false
+
+volumes:
+  sshkeys:
