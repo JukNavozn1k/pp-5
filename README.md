@@ -15,6 +15,7 @@
 ### Установка основных зависимостей (Ubuntu / WSL):
 
 ```bash
-sudo apt update
-sudo apt install build-essential g++ make openssh-client openssh-server
+sudo apt update /
+sudo apt install pvm libpvm3 pvm-dev pvm-examples / 
+sudo apt install build-essential g++ make openssh-client openssh-server /
 sudo apt install -y pvm
