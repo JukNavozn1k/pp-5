@@ -19,3 +19,6 @@ sudo apt update /
 sudo apt install pvm libpvm3 pvm-dev pvm-examples / 
 sudo apt install build-essential g++ make openssh-client openssh-server /
 sudo apt install -y pvm
+```
+
+если не видит PVM_ROOT chmod -R 755 $PVM_ROOT
